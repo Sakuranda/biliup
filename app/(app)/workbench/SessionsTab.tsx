@@ -21,7 +21,7 @@ import dc from '@/app/ui/data-card.module.scss'
 import styles from './sessions.module.scss'
 import SessionMergeDialog from './SessionMergeDialog'
 import {GlobalDialog} from '@/app/ui/editor/controls/GlobalDialog'
-import {X,Film,Play,Scissors} from 'lucide-react'
+import {X,Download,Film,Play,Scissors} from 'lucide-react'
 import dynamic from 'next/dynamic'
 const Player=dynamic(()=>import('@/app/ui/Player'),{ssr:false})
 
@@ -306,11 +306,17 @@ const FileLists = ({ record }: { record: SessionSummary }) => {
       {detail.segments.map((segment) => {
         const start = isReadable(segment) ? segment.start_ms : undefined
         const duration = segmentEnd(segment)-segment.start_ms
+        const mediaUrl = `${API_BASE}/v1/editor/sessions/${record.id}/media/recording-${segment.source_session_id ?? record.id}-${segment.id}`
         return (
           <div key={segment.id} className={styles.recordingFile}>
             <div className={styles.fileIcon}><Film size={21}/></div>
             <div className={styles.fileInfo}><strong>{baseName(segment.file_name)}</strong><div className={styles.fileMeta}><span className={styles.fileFormat}>{segment.container.toUpperCase()}</span>{duration>0&&<span>{formatSpan(duration)}</span>}{segment.bytes!==null&&<span>{formatSize(segment.bytes)}</span>}{segment.state==='recording'&&<span className={styles.fileRecording}>录制中</span>}{!isReadable(segment)&&<span className={styles.fileUnavailable}>{segment.state==='missing'?'文件缺失':'已删除'}</span>}</div></div>
-            {start !== undefined&&<div className={styles.fileActions}><button type="button" className={styles.fileAction} onClick={()=>setPlaying(segment)}><Play size={15}/>播放</button>{can('clip.edit')&&<Link href={replayHref(record.id,start)} className={styles.fileAction}><Scissors size={15}/>剪辑</Link>}</div>}
+            {start !== undefined && <div className={styles.fileActions}>
+              <button type="button" className={styles.fileAction} onClick={() => setPlaying(segment)}><Play size={15}/>播放</button>
+              {can('clip.edit') && <Link href={replayHref(record.id,start)} className={styles.fileAction}><Scissors size={15}/>剪辑</Link>}
+              {can('file.view') && segment.state !== 'recording' &&
+                <a href={`${mediaUrl}/download`} download={baseName(segment.file_name)} className={styles.fileAction}><Download size={15}/>下载</a>}
+            </div>}
           </div>
         )
       })}

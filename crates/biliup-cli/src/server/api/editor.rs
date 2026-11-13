@@ -578,6 +578,36 @@ pub async fn session_media(
         .read()
         .await;
     match editor::media::session_source(&pool, id, &media).await {
+        Ok((path, source)) if kind == "download" => {
+            if source.state == "recording" {
+                return (StatusCode::CONFLICT, "录像尚不可下载").into_response();
+            }
+            let extension = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .filter(|ext| ext.bytes().all(|b| b.is_ascii_alphanumeric()))
+                .unwrap_or("bin");
+            let disposition = format!(
+                "attachment; filename=\"recording-{}.{extension}\"; filename*=UTF-8''{}",
+                source.segment_id,
+                urlencoding::encode(&source.file_name)
+            );
+            let mut response = serve_media(
+                &jobs,
+                path,
+                editor::MediaSource::Recording(source),
+                "file",
+                request,
+            )
+            .await;
+            if response.status().is_success() {
+                response.headers_mut().insert(
+                    axum::http::header::CONTENT_DISPOSITION,
+                    axum::http::HeaderValue::from_str(&disposition).expect("encoded file name"),
+                );
+            }
+            response
+        }
         Ok((path, source)) if kind == "probe" => {
             let source = editor::MediaSource::Recording(source);
             let result = tokio::time::timeout(std::time::Duration::from_secs(90), editor::media::probe(&pool, &path, &source, 30.)).await;
