@@ -242,7 +242,7 @@ pub async fn picture(
         .tempfile_in(&directory)
         .map_err(|e| e.to_string())?
         .into_temp_path();
-    let mut command = crate::tools::ffmpeg_command();
+    let mut command = crate::tools::editor_ffmpeg_command();
     command.args([
         "-hide_banner",
         "-nostdin",

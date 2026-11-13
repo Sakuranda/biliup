@@ -96,7 +96,7 @@ pub async fn frame_with_quality(
         })?;
     let at = plan.output_ms(t_ms);
     let width = width.clamp(MIN_WIDTH, MAX_WIDTH);
-    let mut child = crate::tools::ffmpeg_command()
+    let mut child = crate::tools::editor_ffmpeg_command()
         .args(["-hide_banner", "-loglevel", "error", "-nostats"])
         .args(["-f", remux::ffmpeg_format(plan.container), "-i", "pipe:0"])
         .args(["-ss", &format!("{}.{:03}", at / 1000, at % 1000)])

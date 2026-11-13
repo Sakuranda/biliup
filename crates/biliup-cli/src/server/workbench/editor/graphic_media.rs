@@ -177,7 +177,7 @@ fn input(command: &mut Command, path: &Path) {
         .arg(path);
 }
 fn process() -> Command {
-    let mut c = crate::tools::ffmpeg_command();
+    let mut c = crate::tools::editor_ffmpeg_command();
     c.args(["-nostdin", "-hide_banner"])
         .stdin(Stdio::null())
         .kill_on_drop(true);

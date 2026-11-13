@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+IFS=: read -r hierarchy controllers subgroup < /proc/self/cgroup
+case "$subgroup" in
+    /system.slice/biliup.service/main|/system.slice/biliup-verify.service/main|/system.slice/biliup-browser-probe.service/main)
+        group="/sys/fs/cgroup${subgroup%/main}"
+        ;;
+    *)
+        printf 'Cannot identify the BiliUP editor CPU group: %s\n' "$subgroup" >&2
+        exit 1
+        ;;
+esac
+
+printf '+cpu\n' > "$group/cgroup.subtree_control"
+mkdir -p "$group/editor"
+printf '50000 100000\n' > "$group/editor/cpu.max"
+printf '%s\n' "$$" > "$group/editor/cgroup.procs"
+exec /usr/bin/nice -n 10 "$@"

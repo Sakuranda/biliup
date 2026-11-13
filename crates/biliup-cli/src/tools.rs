@@ -242,6 +242,16 @@ pub fn ffmpeg_command() -> tokio::process::Command {
     command(ffmpeg())
 }
 
+/// Run editor FFmpeg in a deployment-specific resource group when configured.
+pub fn editor_ffmpeg_command() -> tokio::process::Command {
+    if let Some(wrapper) = std::env::var_os("BILIUP_EDITOR_FFMPEG_WRAPPER") {
+        let mut process = command(wrapper);
+        process.arg(ffmpeg());
+        return process;
+    }
+    ffmpeg_command()
+}
+
 /// For tests that return early because a tool (ffmpeg, an encoder) is
 /// missing. A skipped test still reports `ok`, and libtest captures
 /// `eprintln!`, so this writes to stderr directly: CI logs then show which
@@ -258,6 +268,9 @@ pub(crate) fn note_skipped_test(reason: &str) {
 /// not slow down recording: `nice 10` on Unix, `BELOW_NORMAL_PRIORITY_CLASS`
 /// on Windows.
 pub fn low_priority_ffmpeg_command() -> tokio::process::Command {
+    if std::env::var_os("BILIUP_EDITOR_FFMPEG_WRAPPER").is_some() {
+        return editor_ffmpeg_command();
+    }
     #[cfg_attr(not(any(unix, windows)), allow(unused_mut))]
     let mut command = std_command(ffmpeg());
     #[cfg(windows)]

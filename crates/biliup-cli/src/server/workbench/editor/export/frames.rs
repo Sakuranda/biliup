@@ -432,7 +432,7 @@ async fn execute(
                 return Err("取帧命令超出限制".into());
             }
             let output = local(directory, args.last().ok_or("取帧缺少输出")?)?;
-            let mut command = crate::tools::ffmpeg_command();
+            let mut command = crate::tools::editor_ffmpeg_command();
             command
                 .args(["-filter_complex_threads", "1", "-threads", "1"])
                 .args(&args)

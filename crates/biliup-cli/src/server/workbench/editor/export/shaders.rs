@@ -25,7 +25,7 @@ struct Process {
 }
 impl Process {
     fn start(args: &[String], directory: &Path, encode: bool) -> Result<Self, String> {
-        let mut command = crate::tools::ffmpeg_command();
+        let mut command = crate::tools::editor_ffmpeg_command();
         command
             .args(args)
             .current_dir(directory)

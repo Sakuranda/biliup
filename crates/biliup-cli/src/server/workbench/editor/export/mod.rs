@@ -446,7 +446,7 @@ pub async fn render_graphics(
             tokio::fs::write(temp.path().join("graph.txt"), encode.graph)
                 .await
                 .map_err(|e| e.to_string())?;
-            let mut command = crate::tools::ffmpeg_command();
+            let mut command = crate::tools::editor_ffmpeg_command();
             command
                 .current_dir(temp.path())
                 .args([

@@ -267,7 +267,7 @@ pub async fn upload(
             .tempfile_in(&directory)
             .map_err(|e| e.to_string())?
             .into_temp_path();
-        let mut command = crate::tools::ffmpeg_command();
+        let mut command = crate::tools::editor_ffmpeg_command();
         command
             .args([
                 "-y",
@@ -340,7 +340,7 @@ pub async fn upload(
         let (width,height)=super::svg::size(&text)?;
         ("image".to_string(),None,json!({"width":width,"height":height,"hasAudio":false}),"svg")
     } else {
-    let mut command = crate::tools::ffmpeg_command();
+    let mut command = crate::tools::editor_ffmpeg_command();
     command
         .args([
             "-nostdin",

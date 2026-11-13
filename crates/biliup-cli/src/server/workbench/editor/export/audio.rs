@@ -23,7 +23,7 @@ pub(super) async fn run(
 ) -> Result<String, String> {
     let total = pass.total_ms.max(1);
     tokio::fs::write(directory.join("audio.txt"), pass.graph).await.map_err(|e| e.to_string())?;
-    let mut command = crate::tools::ffmpeg_command();
+    let mut command = crate::tools::editor_ffmpeg_command();
     command.current_dir(directory)
         .args(["-hide_banner", "-nostdin", "-y", "-nostats", "-loglevel", "info", "-progress", "pipe:1", "-filter_complex_threads", "1"])
         .args(pass.inputs)

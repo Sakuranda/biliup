@@ -124,7 +124,7 @@ pub async fn generate(
         }
     }
     let _slot = DECODES.acquire().await.map_err(|e| e.to_string())?;
-    let mut command = crate::tools::ffmpeg_command();
+    let mut command = crate::tools::editor_ffmpeg_command();
     command
         .args(["-v", "error", "-nostdin", "-i"])
         .arg(path)
