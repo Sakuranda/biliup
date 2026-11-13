@@ -1,0 +1,10 @@
+[Unit]
+Description=Check BiliUP editor MP4 expiry every hour
+
+[Timer]
+OnCalendar=hourly
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

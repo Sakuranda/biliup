@@ -1,0 +1,12 @@
+[Unit]
+Description=Expire BiliUP editor MP4 proxies after 72 hours
+
+[Service]
+Type=oneshot
+User=biliup
+Group=biliup
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/biliup/renders/editor-proxies
+ExecStart=/usr/bin/find -P /srv/biliup/renders/editor-proxies -regextype posix-extended -mindepth 2 -maxdepth 2 -type f -regex '/srv/biliup/renders/editor-proxies/[1-9][0-9]*/[0-9a-f]{64}\\.mp4' ! -newermt '72 hours ago' -delete
