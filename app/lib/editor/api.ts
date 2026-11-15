@@ -1,5 +1,5 @@
 import { apiFetch, fetcher, handleResponse } from '../api-streamer'
-import { documentProblems, type EditorDocument } from './project'
+import { documentProblems, restoreRecordingTail, type EditorDocument } from './project'
 import { editorText } from './i18n'
 
 export interface ProjectSummary {
@@ -18,14 +18,16 @@ export class ProjectSaveConflict extends Error {
   }
 }
 function checkDocument(document: EditorDocument): EditorDocument {
-  const problems = documentProblems(document)
+  const restored = restoreRecordingTail(document)
+  const problems = documentProblems(restored)
   if (problems.length) throw new Error(problems.map(p => p.message).join('；'))
-  return document
+  return restored
+}
+function checkedProject(saved: SavedProject): SavedProject {
+  return { ...saved, document: checkDocument(saved.document) }
 }
 export async function loadProject(id: number): Promise<SavedProject> {
-  const saved = await fetcher(`${projectsUrl}/${id}`) as SavedProject
-  checkDocument(saved.document)
-  return saved
+  return checkedProject(await fetcher(`${projectsUrl}/${id}`))
 }
 export async function loadRevision(id: number, revision: number): Promise<EditorDocument> {
   return checkDocument(await fetcher(`${projectsUrl}/${id}/revisions/${revision}`))
@@ -33,7 +35,7 @@ export async function loadRevision(id: number, revision: number): Promise<Editor
 export async function stepProjectHistory(project:Pick<SavedProject,'id'|'revision'>,action:'undo'|'redo'|'jump',target?:number):Promise<SavedProject>{
   const response=await apiFetch(`${projectsUrl}/${project.id}/history`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:project.revision,action,...(target!==undefined?{target}:{})})})
   await handleResponse(response)
-  return response.json()
+  return checkedProject(await response.json())
 }
 
 export async function saveProject(document: EditorDocument, previous?: Pick<SavedProject, 'id' | 'revision'>, generated?:ReadonlyArray<string>, history?:{label:string;kind:'edit'|'jump'}, suggestion?:SuggestionAcceptance): Promise<SavedProject> {
@@ -45,7 +47,7 @@ export async function saveProject(document: EditorDocument, previous?: Pick<Save
   })
   if (previous && res.status === 409) throw new ProjectSaveConflict()
   await handleResponse(res)
-  return res.json()
+  return checkedProject(await res.json())
 }
 export async function deleteProject(project: Pick<SavedProject, 'id' | 'revision'>): Promise<void> {
   await handleResponse(await apiFetch(`${projectsUrl}/${project.id}?revision=${project.revision}`, { method: 'DELETE' }))

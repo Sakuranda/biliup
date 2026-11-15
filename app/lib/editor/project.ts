@@ -71,9 +71,9 @@ export function msToFrame(ms: number, fps: Canvas['fps']): number {
   return Math.round(finiteTime(ms, '时间') * fps / 1000)
 }
 
-/** Include the last frame whose start falls inside the recorded snapshot. */
+/** Match the complete frames persisted by the server for the recorded snapshot. */
 export function recordingFrameCount(durationMs: number, fps: Canvas['fps']): number {
-  return Math.max(1, Math.ceil(durationMs * fps / 1000))
+  return Math.max(1, Math.floor(durationMs * fps / 1000))
 }
 
 /** Uploads are probed against the saved canvas; a local draft may already use another frame rate. */
@@ -90,6 +90,35 @@ export function frameForCanvas(frame: number, sourceFps: number, canvas: Pick<Ca
 
 export function editorProblems(project: unknown, modules: ReadonlyMap<string, ModuleManifest> = builtinModules): Problem[] {
   return validateProject(project, modules)
+}
+
+/** Older saves may still have a one-frame recording overrun after server probing. */
+export function restoreRecordingTail(document: EditorDocument): EditorDocument {
+  const frameLimits = new Map<string, number>()
+  const { project, sources } = document
+  for (const media of project.media) {
+    const source = sources[media.id]
+    if (source?.kind !== 'recording' || media.kind !== 'video') continue
+    const frames = recordingFrameCount(source.durationMs, project.canvas.fps)
+    if (media.probe?.frames === frames) frameLimits.set(media.id, frames)
+  }
+  let changed = false
+  const tracks = project.tracks.map(track => {
+    let repaired = false
+    const items = track.items.map(item => {
+      if (item.type !== 'clip' || !item.media || item.loop || item.hold) return item
+      const frames = frameLimits.get(item.media)
+      const sourceIn = item.in ?? 0
+      const used = sourceIn + item.duration * (item.speed ?? 1)
+      if (frames === undefined || sourceIn >= frames || used <= frames || used > frames + 1) return item
+      repaired = true
+      return { ...item, hold: true }
+    })
+    if (!repaired) return track
+    changed = true
+    return { ...track, items }
+  })
+  return changed ? { ...document, project: { ...project, tracks } } : document
 }
 
 /** Bound edits by the imported recording snapshot, independently of source metadata.
@@ -162,13 +191,14 @@ export function projectFromSession(
     const probe=options.probes?.[id]
     const frames = recordingFrameCount(sources[id].durationMs, fps)
     const duration = end - start
-    // Project boundaries and source in-points round independently. Keep the same
-    // timeline position and length while fitting the clip inside the recording.
-    const sourceIn = Math.min(msToFrame(from - segment.start_ms, fps), frames - duration)
+    // Keep the rounded timeline length. A whole recording can be one frame longer
+    // than its server-rounded source length, so hold its last available frame.
+    const sourceIn = Math.min(msToFrame(from - segment.start_ms, fps), Math.max(0, frames - duration))
     media.push({ id, kind: 'video', name: segment.file_name, path: `recordings/${id}.${segment.container}`,
       probe:{...probe,frames} })
     items.push({ id: `clip-${owner}-${segment.id}`, type: 'clip', media: id, name: segment.file_name,
       in: sourceIn, duration,
+      ...(duration > frames ? { hold: true } : {}),
       ...(start > previousEnd ? { gap: start - previousEnd } : {}),
     })
     previousEnd = end
