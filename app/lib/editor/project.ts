@@ -36,6 +36,8 @@ export interface EditorDocument {
   warnings: string[]
 }
 
+type RecordingDocument = Omit<EditorDocument, 'sources'> & { sources: Record<string, RecordingSource> }
+
 export const DEFAULT_CANVAS: Canvas = { width: 1920, height: 1080, fps: 30 }
 
 export function emptyProject(name: string, canvas: Canvas = DEFAULT_CANVAS): EditorDocument {
@@ -67,6 +69,11 @@ function validId(value: number, label: string): number {
 /** Quantize absolute boundaries once; summing rounded durations introduces drift over long recordings. */
 export function msToFrame(ms: number, fps: Canvas['fps']): number {
   return Math.round(finiteTime(ms, '时间') * fps / 1000)
+}
+
+/** Include the last frame whose start falls inside the recorded snapshot. */
+export function recordingFrameCount(durationMs: number, fps: Canvas['fps']): number {
+  return Math.max(1, Math.ceil(durationMs * fps / 1000))
 }
 
 /** Uploads are probed against the saved canvas; a local draft may already use another frame rate. */
@@ -111,7 +118,7 @@ export function documentProblems(document: EditorDocument): Problem[] {
 export function projectFromSession(
   detail: SessionDetail,
   options: { canvas?: Canvas; markers?: Marker[]; range?: { inMs: number; outMs: number }; name?: string; probes?:Readonly<Record<string,MediaProbe>> } = {},
-): EditorDocument {
+): RecordingDocument {
   validId(detail.id, '场次 ID')
   const canvas = options.canvas ?? DEFAULT_CANVAS
   const endMs = detail.segments.reduce((end, s) => Math.max(end, s.end_ms ?? s.start_ms), detail.duration_ms)
@@ -153,10 +160,15 @@ export function projectFromSession(
     }
     // Logical path, never an absolute filesystem path or a client-supplied URL.
     const probe=options.probes?.[id]
+    const frames = recordingFrameCount(sources[id].durationMs, fps)
+    const duration = end - start
+    // Project boundaries and source in-points round independently. Keep the same
+    // timeline position and length while fitting the clip inside the recording.
+    const sourceIn = Math.min(msToFrame(from - segment.start_ms, fps), frames - duration)
     media.push({ id, kind: 'video', name: segment.file_name, path: `recordings/${id}.${segment.container}`,
-      probe:{...probe,frames:Math.max(1,Math.floor((segmentEnd-segment.start_ms)*fps/1000))} })
+      probe:{...probe,frames} })
     items.push({ id: `clip-${owner}-${segment.id}`, type: 'clip', media: id, name: segment.file_name,
-      in: msToFrame(from - segment.start_ms, fps), duration: end - start,
+      in: sourceIn, duration,
       ...(start > previousEnd ? { gap: start - previousEnd } : {}),
     })
     previousEnd = end

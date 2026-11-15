@@ -1,6 +1,6 @@
 import type {Marker} from '../markers'
 import type {SessionDetail} from '../sessions'
-import {mediaForCanvas,projectFromSession,type EditorDocument} from './project'
+import {projectFromSession,recordingFrameCount,type EditorDocument} from './project'
 import {editHistory,type EditorHistory} from './history'
 import {applyEdit,createSession} from './core/timeline/apply-ops'
 import {mainEnd} from './core/timeline/rules'
@@ -32,11 +32,13 @@ function recordingPlan(document:EditorDocument,{detail,markers=[],range,title,pr
     const id=existing?.id??(taken.has(media.id)?uniqueIn(media.id,taken):media.id)
     taken.add(id);ids.set(media.id,id)
     const source=imported.sources[media.id],previous=sources[id]
-    sources[id]=previous?.kind==='recording'&&source.kind==='recording'
+    const snapshot=previous?.kind==='recording'
       ? {...previous,durationMs:Math.max(previous.durationMs,source.durationMs),state:source.state,hasDanmaku:source.hasDanmaku} : source
+    sources[id]=snapshot
     if(!existing)ops.push({op:'add_media',media:{...media,id}})
     else {
-      const probe=mediaForCanvas({...existing,probe:{...existing.probe,...media.probe}},sources[id]!.durationMs,current.canvas).probe!
+      const frames=recordingFrameCount(snapshot.durationMs,current.canvas.fps)
+      const probe={...existing.probe,...media.probe,frames}
       if(Object.entries(probe).some(([key,value])=>existing.probe?.[key as keyof MediaProbe]!==value))ops.push({op:'update_media',media:id,set:{probe}})
     }
   }
