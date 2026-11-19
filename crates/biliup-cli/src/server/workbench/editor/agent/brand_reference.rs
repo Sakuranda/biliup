@@ -74,7 +74,8 @@ impl Service {
         let (jpeg,times,seconds)=tokio::time::timeout(Duration::from_secs(120),async{
             let permit=transcode::acquire(&child).await.map_err(invalid)?;
             let mut command=crate::tools::ffmpeg_command();
-            command.args(["-hide_banner","-nostdin","-protocol_whitelist","file,pipe","-format_whitelist",editor::imports::FORMATS,"-i"]).arg(&path)
+            command.args(["-hide_banner", "-nostdin", "-protocol_whitelist", "file,pipe", "-format_whitelist", editor::imports::FORMATS]);
+            crate::tools::video_input(&mut command, &path)
                 .args(["-map","0:v:0","-frames:v","1","-t","0.05","-an","-sn","-dn","-f","null","-"]);
             let log=engine::run_process(command,&child,Duration::from_secs(30),|_,_|{}).await.map_err(invalid)?;drop(permit);
             let (kind,duration,_,_)=editor::imports::metadata(&log).map_err(invalid)?;
@@ -87,7 +88,8 @@ impl Service {
                 let output=directory.path().join(format!("{index}.jpg"));
                 let _permit=transcode::acquire(&child).await.map_err(invalid)?;
                 let mut command=crate::tools::ffmpeg_command();
-                command.args(["-hide_banner","-nostdin","-y","-threads","1","-protocol_whitelist","file,pipe","-format_whitelist",editor::imports::FORMATS,"-ss",&format!("{at:.6}"),"-i"]).arg(&path)
+                command.args(["-hide_banner", "-nostdin", "-y", "-threads", "1", "-protocol_whitelist", "file,pipe", "-format_whitelist", editor::imports::FORMATS, "-ss", &format!("{at:.6}")]);
+                crate::tools::video_input(&mut command, &path)
                     .args(["-map","0:v:0","-frames:v","1","-an","-sn","-dn","-vf","scale=320:180:force_original_aspect_ratio=decrease,pad=320:180:(ow-iw)/2:(oh-ih)/2,setsar=1","-c:v","mjpeg","-q:v","3","-threads","1","-update","1"]).arg(&output);
                 engine::run_process(command,&child,Duration::from_secs(30),|_,_|{}).await.map_err(invalid)?;
                 let bytes=editor::resources::importer::read(&output,2*1024*1024).await?;

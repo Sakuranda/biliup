@@ -435,8 +435,8 @@ async fn execute(
             let mut command = crate::tools::editor_ffmpeg_command();
             command
                 .args(["-filter_complex_threads", "1", "-threads", "1"])
-                .args(&args)
                 .current_dir(directory);
+            add_video_inputs(&mut command, &args, &prepared.document.project, &prepared.paths);
             engine::run_process(command, cancel, Duration::from_secs(60), |_, _| {}).await?;
             *bytes += tokio::fs::metadata(output)
                 .await

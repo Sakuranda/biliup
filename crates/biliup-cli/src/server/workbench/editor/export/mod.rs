@@ -127,6 +127,33 @@ impl Encode {
     }
 }
 
+fn add_video_inputs(
+    command: &mut tokio::process::Command,
+    args: &[String],
+    project: &Value,
+    paths: &BTreeMap<String, String>,
+) {
+    if std::env::var_os("BILIUP_VAAPI_DECODE_DEVICE").is_none() {
+        command.args(args);
+        return;
+    }
+    let files: std::collections::BTreeSet<&str> = project["media"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|media| media["kind"] == "video")
+        .filter_map(|media| paths.get(media["id"].as_str()?).map(String::as_str))
+        .collect();
+    let mut args = args.iter().peekable();
+    while let Some(arg) = args.next() {
+        if arg == "-i" && args.peek().is_some_and(|path| files.contains(path.as_str())) {
+            crate::tools::video_input(command, args.next().unwrap());
+        } else {
+            command.arg(arg);
+        }
+    }
+}
+
 pub struct Output {
     pub width: u32,
     pub height: u32,
@@ -459,8 +486,9 @@ pub async fn render_graphics(
                     "-filter_complex_threads",
                     "1",
                 ])
-                .args(selected.input_args())
-                .args(encode.inputs)
+                .args(selected.input_args());
+            add_video_inputs(&mut command, &encode.inputs, &project, &paths);
+            command
                 .args(["-filter_complex_script", "graph.txt"])
                 .args(encode.output_args);
             report(Progress::Encoding {

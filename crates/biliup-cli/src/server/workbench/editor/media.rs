@@ -258,9 +258,8 @@ pub async fn picture(
                 &format!("{:.6}", interval * index as f64),
                 "-threads",
                 "1",
-                "-i",
-            ])
-            .arg(path);
+            ]);
+        crate::tools::video_input(&mut command, path);
         filters.push(format!("[{index}:v:0]scale=160:90:force_original_aspect_ratio=decrease,pad=160:90:(ow-iw)/2:(oh-ih)/2,setsar=1[v{index}]"));
     }
     let map = if count > 1 {

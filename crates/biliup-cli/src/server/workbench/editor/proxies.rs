@@ -447,9 +447,8 @@ impl Jobs {
                 "file,pipe",
                 "-format_whitelist",
                 super::imports::FORMATS,
-                "-i",
-            ])
-            .arg(&entry.path)
+            ]);
+        crate::tools::video_input(&mut probe, &entry.path)
             .args(["-map", "0:v:0", "-frames:v", "1", "-an", "-f", "null", "-"])
             .stdin(Stdio::null());
         let text = engine::run_process(probe, cancel, Duration::from_secs(30), |_, _| {})
@@ -472,7 +471,8 @@ impl Jobs {
             .map_err(invalid)?
             .into_temp_path();
         let mut command = crate::tools::editor_ffmpeg_command();
-        command.args(["-nostdin","-hide_banner","-y","-v","error","-nostats","-progress","pipe:1","-protocol_whitelist","file,pipe","-format_whitelist",super::imports::FORMATS,"-i"]).arg(&entry.path).arg("-t").arg(format!("{:.6}",entry.seconds))
+        command.args(["-nostdin", "-hide_banner", "-y", "-v", "error", "-nostats", "-progress", "pipe:1", "-protocol_whitelist", "file,pipe", "-format_whitelist", super::imports::FORMATS]);
+        crate::tools::video_input(&mut command, &entry.path).arg("-t").arg(format!("{:.6}",entry.seconds))
             .args(["-map","0:v:0","-map","0:a:0?","-vf","scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p","-c:v","libx264","-preset","veryfast","-crf","23","-tune","fastdecode","-g","10","-bf","0","-fps_mode","passthrough","-c:a","aac","-b:a","160k","-tag:v","avc1","-movflags","+faststart","-f","mp4"]).arg(&temp).stdin(Stdio::null());
         engine::run_process(command, cancel, Duration::from_secs(120), |ms, _| {
             lock(&entry.state).progress = (ms as f64 / 1000. / entry.seconds).clamp(0., 0.99);

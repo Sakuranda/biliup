@@ -339,9 +339,8 @@ pub(crate) async fn run_process(
 
 pub(crate) async fn probe(path: &Path, cancel: &CancellationToken) -> Result<MediaInfo, String> {
     let mut command = crate::tools::ffmpeg_command();
-    command
-        .args(["-nostdin", "-hide_banner", "-copyts", "-i"])
-        .arg(path)
+    command.args(["-nostdin", "-hide_banner", "-copyts"]);
+    crate::tools::video_input(&mut command, path)
         .args([
             "-map",
             "0:v:0",
@@ -853,7 +852,9 @@ async fn render_internal(
                 ),
             ]);
         }
-        command.args(["-threads", "2", "-i"]).arg(
+        command.args(["-threads", "2"]);
+        crate::tools::video_input(
+            &mut command,
             source
                 .path
                 .canonicalize()

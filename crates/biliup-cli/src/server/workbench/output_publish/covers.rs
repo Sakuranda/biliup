@@ -146,7 +146,8 @@ pub async fn frame(pool:&ConnectionPool,jobs:&RenderJobs,kind:&str,output_id:i64
         .map_err(|_|invalid("视频处理繁忙，请稍后再截帧"))?.map_err(invalid)?;
     let temp=tempfile::Builder::new().prefix("biliup-cover-frame-").suffix(".jpg").tempfile().map_err(|_|invalid("无法准备截帧文件"))?.into_temp_path();
     let mut command=crate::tools::ffmpeg_command();
-    command.args(["-hide_banner","-loglevel","error","-nostdin","-y","-ss",&format!("{:.3}",at_ms as f64/1000.),"-threads","1","-i"]).arg(&output.path)
+    command.args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss", &format!("{:.3}", at_ms as f64 / 1000.), "-threads", "1"]);
+    crate::tools::video_input(&mut command, &output.path)
         .args(["-map","0:v:0","-frames:v","1","-an","-sn","-vf","scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,setsar=1","-c:v","mjpeg","-q:v","3","-threads","1","-update","1"]).arg(&temp);
     crate::server::common::processing::engine::run_process(command,&cancel,Duration::from_secs(30),|_,_|{}).await.map_err(|_|invalid("成片截帧失败，请检查 FFmpeg 或更换时间点"))?;
     drop(_permit);

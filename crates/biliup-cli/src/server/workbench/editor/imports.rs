@@ -277,14 +277,14 @@ pub async fn upload(
                 "file,pipe",
                 "-format_whitelist",
                 "mov,matroska,webm",
-                "-i",
-            ])
-            .arg(&temp);
+            ]);
         if audio {
+            command.arg("-i").arg(&temp);
             command.args([
                 "-map", "0:a:0", "-vn", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             ]);
         } else {
+            crate::tools::video_input(&mut command, &temp);
             let fps = saved.document.project["canvas"]["fps"]
                 .as_f64()
                 .unwrap_or(30.)

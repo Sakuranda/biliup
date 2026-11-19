@@ -215,7 +215,8 @@ pub async fn analyze(
 ) -> Result<Value, String> {
     check(cancel)?;
     let mut command = crate::tools::ffmpeg_command();
-    command.args(["-hide_banner","-nostdin","-nostats","-progress","pipe:2","-i"]).arg(path).args(["-map","0:V:0","-an","-sn","-dn","-vf","scale=320:-2:flags=fast_bilinear,format=gray,scdet=threshold=10,freezedetect=n=-60dB:d=0.5,blurdetect,metadata=mode=print:key=lavfi.blur,scale=128:72:force_original_aspect_ratio=increase:flags=area,crop=128:72","-fps_mode","passthrough","-f","rawvideo","-pix_fmt","gray","pipe:1"]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    command.args(["-hide_banner", "-nostdin", "-nostats", "-progress", "pipe:2"]);
+    crate::tools::video_input(&mut command, path).args(["-map","0:V:0","-an","-sn","-dn","-vf","scale=320:-2:flags=fast_bilinear,format=gray,scdet=threshold=10,freezedetect=n=-60dB:d=0.5,blurdetect,metadata=mode=print:key=lavfi.blur,scale=128:72:force_original_aspect_ratio=increase:flags=area,crop=128:72","-fps_mode","passthrough","-f","rawvideo","-pix_fmt","gray","pipe:1"]).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     let mut child = command
         .spawn()
         .map_err(|e| format!("无法启动视频分析：{e}"))?;

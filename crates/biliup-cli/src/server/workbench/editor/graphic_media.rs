@@ -165,16 +165,18 @@ impl Info {
         (even(self.width), even(self.height))
     }
 }
-fn input(command: &mut Command, path: &Path) {
-    command
-        .args([
-            "-protocol_whitelist",
-            "file,pipe",
-            "-format_whitelist",
-            super::imports::FORMATS,
-            "-i",
-        ])
-        .arg(path);
+fn input(command: &mut Command, path: &Path, video: bool) {
+    command.args([
+        "-protocol_whitelist",
+        "file,pipe",
+        "-format_whitelist",
+        super::imports::FORMATS,
+    ]);
+    if video {
+        crate::tools::video_input(command, path);
+    } else {
+        command.arg("-i").arg(path);
+    }
 }
 fn process() -> Command {
     let mut c = crate::tools::editor_ffmpeg_command();
@@ -238,12 +240,12 @@ fn capture(text: &str, pattern: &str) -> Option<String> {
         .map(|c| c[1].to_string())
 }
 pub(super) async fn colour_hint(path:&Path,cancel:&CancellationToken)->Result<Option<u32>,String>{
-    Ok(probe(path,cancel).await?.untagged)
+    Ok(probe(path, true, cancel).await?.untagged)
 }
-async fn probe(path: &Path, cancel: &CancellationToken) -> Result<Info, String> {
+async fn probe(path: &Path, video: bool, cancel: &CancellationToken) -> Result<Info, String> {
     let mut command = process();
     command.arg("-copyts");
-    input(&mut command, path);
+    input(&mut command, path, video);
     command.args([
         "-map",
         "0:v:0",
@@ -325,7 +327,7 @@ async fn packet_times(
 ) -> Result<Vec<f64>, String> {
     let mut command = process();
     command.args(["-v", "error", "-copyts"]);
-    input(&mut command, path);
+    input(&mut command, path, false);
     command.args([
         "-map", "0:v:0", "-an", "-sn", "-dn", "-c:v", "copy", "-f", "framecrc", "-",
     ]);
@@ -383,7 +385,7 @@ impl Frames {
         );
         let cell = self.info_cell(&identity).await;
         Ok(cell
-            .get_or_try_init(|| probe(path, cancel))
+            .get_or_try_init(|| probe(path, true, cancel))
             .await?
             .size(ask))
     }
@@ -520,7 +522,7 @@ impl Frames {
             return Ok(picture);
         }
         let cell = self.info_cell(&identity).await;
-        let info = cell.get_or_try_init(|| probe(path, cancel)).await?;
+        let info = cell.get_or_try_init(|| probe(path, kind == "video", cancel)).await?;
         let (width, height) = info.size(ask);
         let n = if kind == "image" {
             0
@@ -534,7 +536,7 @@ impl Frames {
         let picture = if kind == "image" {
             let mut command = process();
             command.args(["-v", "error"]);
-            input(&mut command, path);
+            input(&mut command, path, false);
             command.args([
                 "-frames:v",
                 "1",
@@ -639,7 +641,7 @@ fn start(
     if from > 0 {
         command.args(["-ss", &format!("{:.6}", info.seek(from))]);
     }
-    input(&mut command, path);
+    input(&mut command, path, true);
     let colour = match info.untagged {
         None => "",
         Some(h) if h < 720 => {

@@ -22,6 +22,8 @@ services:
       - "${BILIUP_PORT:-19159}:19159"
     cpus: 2.0
     mem_limit: 2g
+    environment:
+      BILIUP_VAAPI_DECODE_DEVICE: ${BILIUP_VAAPI_DECODE_DEVICE:-}
 
   proxy-cleaner:
     <<: *biliup-runtime

@@ -242,6 +242,19 @@ pub fn ffmpeg_command() -> tokio::process::Command {
     command(ffmpeg())
 }
 
+/// Open a video for decoding. Let FFmpeg transfer decoded frames to system
+/// memory so the same filter graphs also work with a VAAPI decoder.
+pub fn video_input(
+    process: &mut tokio::process::Command,
+    input: impl AsRef<OsStr>,
+) -> &mut tokio::process::Command {
+    if let Some(device) = std::env::var_os("BILIUP_VAAPI_DECODE_DEVICE").filter(|s| !s.is_empty()) {
+        process.args(["-hwaccel:V", "vaapi", "-hwaccel_device:V"]);
+        process.arg(device);
+    }
+    process.arg("-i").arg(input)
+}
+
 /// Run editor FFmpeg in a deployment-specific resource group when configured.
 pub fn editor_ffmpeg_command() -> tokio::process::Command {
     if let Some(wrapper) = std::env::var_os("BILIUP_EDITOR_FFMPEG_WRAPPER") {

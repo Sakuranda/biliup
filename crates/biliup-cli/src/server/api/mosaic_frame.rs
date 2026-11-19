@@ -325,8 +325,8 @@ where
     if let Some(format) = format {
         command.args(["-f", format]);
     }
-    let mut child = command
-        .args(["-i", "pipe:0", "-map", "0:v:0", "-frames:v", "1"])
+    let mut child = crate::tools::video_input(&mut command, "pipe:0")
+        .args(["-map", "0:v:0", "-frames:v", "1"])
         // Expand anamorphic pixels before writing JPEG (which has square pixels)
         // and keep the actual frame shape. This is never a fixed 16:9 canvas.
         .args([

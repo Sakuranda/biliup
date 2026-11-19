@@ -389,10 +389,12 @@ impl ClipExports {
             ratio: Some(0.0),
         };
         let secs = |ms: i64| format!("{}.{:03}", ms / 1000, ms % 1000);
-        let mut child = crate::tools::editor_ffmpeg_command()
+        let mut command = crate::tools::editor_ffmpeg_command();
+        command
             .args(["-hide_banner", "-loglevel", "error", "-nostats"])
             .args(["-progress", "pipe:1"])
-            .args(["-f", remux::ffmpeg_format(plan.container), "-i", "pipe:0"])
+            .args(["-f", remux::ffmpeg_format(plan.container)]);
+        let mut child = crate::tools::video_input(&mut command, "pipe:0")
             .args(["-ss", &secs(from), "-to", &secs(to)])
             .args(["-map", "0:v:0", "-map", "0:a:0?"])
             .args([
