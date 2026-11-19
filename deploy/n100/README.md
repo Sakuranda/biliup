@@ -13,4 +13,4 @@
 
 ## 更新与回滚
 
-提交推送到 `n100-truenas` 后，GitHub Actions 构建并检查 amd64 镜像，然后发布 `n100-truenas` 和对应的 `n100-<完整提交哈希>` 标签。生产部署可把 `BILIUP_IMAGE` 固定在已验证的提交标签。回滚时切回旧标签，并按需恢复更新前备份的数据。
+提交推送到 `n100-truenas` 后，GitHub Actions 构建并检查 amd64 镜像。每次成功测试都会附带可用 `docker load -i biliup-n100.tar.gz` 导入的离线镜像，并向 GHCR 发布 `n100-truenas` 和 `n100-<完整提交哈希>` 标签。生产部署可把 `BILIUP_IMAGE` 固定在已验证的提交标签。回滚时切回旧标签，并按需恢复更新前备份的数据。

@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: biliup-n100-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish:
     runs-on: ubuntu-24.04
@@ -52,6 +56,17 @@ jobs:
             sleep 1
           done
           exit 1
+
+      - name: Save image for offline deployment
+        shell: bash
+        run: docker save "$IMAGE:n100-$GITHUB_SHA" | gzip -1 > "$RUNNER_TEMP/biliup-n100.tar.gz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: biliup-n100-linux-amd64
+          path: ${{ runner.temp }}/biliup-n100.tar.gz
+          compression-level: 0
+          retention-days: 7
 
       - name: Publish the tested image
         shell: bash
