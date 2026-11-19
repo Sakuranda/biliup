@@ -1,0 +1,30 @@
+x-biliup-runtime: &biliup-runtime
+  image: ${BILIUP_IMAGE:-ghcr.io/sakuranda/biliup:n100-truenas}
+  user: "${BILIUP_UID:-568}:${BILIUP_GID:-568}"
+  restart: unless-stopped
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  volumes:
+    - type: bind
+      source: ${BILIUP_DATA:-/mnt/stvx000/files/biliup}
+      target: /opt
+      bind:
+        create_host_path: false
+
+services:
+  biliup:
+    <<: *biliup-runtime
+    init: true
+    command: ["server", "--bind", "0.0.0.0", "--auth"]
+    ports:
+      - "${BILIUP_PORT:-19159}:19159"
+    cpus: 2.0
+    mem_limit: 2g
+
+  proxy-cleaner:
+    <<: *biliup-runtime
+    entrypoint: ["/usr/local/bin/expire-editor-cache"]
+    command: []
+    mem_limit: 64m

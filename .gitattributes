@@ -4,6 +4,7 @@
 *.sql text eol=lf
 
 /deploy/j1900/* text eol=lf
+/deploy/n100/* text eol=lf
 
 # Golden and fixed reference assets retain their source bytes on Windows.
 /crates/danmaku-factory/tests/golden/** -text

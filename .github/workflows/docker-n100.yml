@@ -1,0 +1,65 @@
+name: Biliup for TrueNAS N100
+
+on:
+  push:
+    branches: [n100-truenas]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/sakuranda/biliup
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the amd64 image
+        run: |
+          docker build --target n100-truenas \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE:n100-$GITHUB_SHA" .
+
+      - name: Test service, persistent data and headless renderer
+        shell: bash
+        run: |
+          set -euo pipefail
+          data="$(mktemp -d)"
+          trap 'docker logs biliup-n100-test 2>/dev/null || true; docker rm -f biliup-n100-test >/dev/null 2>&1 || true' EXIT
+          docker run -d --name biliup-n100-test --init --cap-drop ALL \
+            --security-opt no-new-privileges:true --user "$(id -u):$(id -g)" \
+            -p 127.0.0.1:19159:19159 -v "$data:/opt" "$IMAGE:n100-$GITHUB_SHA"
+          for attempt in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:19159/; then
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:19159/
+          test -s "$data/ds_update.log"
+          docker exec biliup-n100-test ffmpeg -hide_banner -version
+          docker exec -d biliup-n100-test /usr/local/bin/editor-browser \
+            --remote-debugging-port=0 --user-data-dir=/tmp/biliup-editor-smoke about:blank
+          for attempt in $(seq 1 20); do
+            if docker exec biliup-n100-test test -s /tmp/biliup-editor-smoke/DevToolsActivePort; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Publish the tested image
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "$IMAGE:n100-$GITHUB_SHA" "$IMAGE:n100-truenas"
+          docker push "$IMAGE:n100-$GITHUB_SHA"
+          docker push "$IMAGE:n100-truenas"

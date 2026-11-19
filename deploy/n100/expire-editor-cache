@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+cache=/opt/renders/editor-proxies
+while :; do
+    if [ -d "$cache" ] && [ ! -L "$cache" ]; then
+        find -P "$cache" -regextype posix-extended -mindepth 2 -maxdepth 2 -type f \
+            -regex "$cache/[1-9][0-9]*/[0-9a-f]{64}\.mp4" \
+            ! -newermt '72 hours ago' -delete
+    fi
+    sleep 3600
+done

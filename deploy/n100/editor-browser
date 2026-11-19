@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+# The renderer loads an embedded page. Docker supplies the outer isolation.
+exec nice -n 10 /usr/bin/chromium-headless-shell --no-sandbox \
+    --use-angle=swiftshader --enable-unsafe-swiftshader "$@"

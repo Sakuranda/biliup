@@ -122,3 +122,12 @@ ENTRYPOINT ["biliup"]
 # 容器内必须监听 0.0.0.0，否则宿主机的端口映射无法转发进容器。
 # CLI 默认的 127.0.0.1 只适用于直接在本机运行的场景。
 CMD ["server", "--bind", "0.0.0.0", "--auth"]
+
+FROM biliup AS n100-truenas
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/*
+COPY --chmod=0755 deploy/n100/editor-browser deploy/n100/editor-nice deploy/n100/expire-editor-cache /usr/local/bin/
+ENV HOME=/tmp BILIUP_EDITOR_BROWSER=/usr/local/bin/editor-browser BILIUP_EDITOR_FFMPEG_WRAPPER=/usr/local/bin/editor-nice
+
+FROM biliup AS default
