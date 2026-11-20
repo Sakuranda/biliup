@@ -67,6 +67,22 @@ sudo systemctl enable --now biliup-editor-cache-clean.timer
    journalctl -u biliup-editor-cache-clean.service -n 10 --no-pager
    ```
 
+## 独立剪辑网页入口的开机重试
+
+使用独立的 `biliup-editor-ui-hotfix.service` 在 19162 端口加载新版网页时，网卡尚未拿到局域网 IP 会使 Nginx 报 `Cannot assign requested address`。默认的快速重启会耗尽启动次数，导致入口在开机后一直关闭。下面的配置让它每 5 秒重试，直到网络就绪；只作用于已有的独立网页服务。
+
+```sh
+sudo install -d -m 0755 /etc/systemd/system/biliup-editor-ui-hotfix.service.d
+sudo install -m 0644 deploy/j1900/biliup-editor-ui-hotfix-retry.conf \
+  /etc/systemd/system/biliup-editor-ui-hotfix.service.d/retry.conf
+sudo systemctl daemon-reload
+sudo systemctl reset-failed biliup-editor-ui-hotfix.service
+sudo systemctl start biliup-editor-ui-hotfix.service
+systemctl show biliup-editor-ui-hotfix.service -p ActiveState -p RestartUSec -p StartLimitIntervalUSec
+```
+
+验证独立入口可以打开 `/workbench`。原来的 `biliup.service` 在上述操作中保持运行，录制无需重启。
+
 ## 回滚
 
 将 `backup` 指向上面保留的备份目录，停用定时器、移除本分支安装的配置，并换回原来的二进制。若需要恢复禁用预览时的目录权限，使用更新前 `stat` 记录的属主和模式。
