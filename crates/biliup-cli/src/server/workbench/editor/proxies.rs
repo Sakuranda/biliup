@@ -391,7 +391,7 @@ impl Jobs {
         let _slot = tokio::select! {_ = cancel.cancelled()=>return Err(invalid("代理已取消")),slot=self.slot.acquire()=>slot.map_err(invalid)?};
         loop {
             // Do not enqueue behind the foreground jobs: recheck their state before claiming CPU.
-            let (_lifecycle, _permit) = loop {
+            let (lifecycle, permit) = loop {
                 if cancel.is_cancelled() {
                     return Err(invalid("代理已取消"));
                 }
@@ -412,7 +412,7 @@ impl Jobs {
             // Incomplete output is discarded; resume from the original when CPU is free again.
             let interrupt = cancel.child_token();
             {
-                let work = self.encode(entry, &interrupt);
+                let work = self.encode(entry, &interrupt, lifecycle, permit);
                 tokio::pin!(work);
                 loop {
                     tokio::select! {
@@ -429,14 +429,18 @@ impl Jobs {
                     }
                 }
             }
-            drop(_permit);
-            drop(_lifecycle);
             let mut state = lock(&entry.state);
             state.phase = "queued";
             state.progress = 0.;
         }
     }
-    async fn encode(&self, entry: &Entry, cancel: &CancellationToken) -> Result<bool, Error> {
+    async fn encode(
+        &self,
+        entry: &Entry,
+        cancel: &CancellationToken,
+        lifecycle: tokio::sync::RwLockReadGuard<'_, ()>,
+        permit: tokio::sync::OwnedSemaphorePermit,
+    ) -> Result<bool, Error> {
         self.validate(entry).await?;
         let mut probe = crate::tools::editor_ffmpeg_command();
         probe
@@ -474,14 +478,23 @@ impl Jobs {
         let mut command = crate::tools::editor_ffmpeg_command();
         command.args(["-nostdin","-hide_banner","-y","-v","error","-nostats","-progress","pipe:1","-protocol_whitelist","file,pipe","-format_whitelist",super::imports::FORMATS,"-i"]).arg(&entry.path).arg("-t").arg(format!("{:.6}",entry.seconds))
             .args(["-map","0:v:0","-map","0:a:0?","-vf","scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuv420p","-c:v","libx264","-preset","veryfast","-crf","23","-tune","fastdecode","-g","10","-bf","0","-fps_mode","passthrough","-c:a","aac","-b:a","160k","-tag:v","avc1","-movflags","+faststart","-f","mp4"]).arg(&temp).stdin(Stdio::null());
+        // A disposable encode must not hold up cleanup and every subsequent media
+        // reader for its entire duration. Missing/relinked sources fail revalidation
+        // before publication, and an interrupted FFmpeg cannot publish partial output.
+        drop(lifecycle);
         engine::run_process(command, cancel, Duration::from_secs(120), |ms, _| {
             lock(&entry.state).progress = (ms as f64 / 1000. / entry.seconds).clamp(0., 0.99);
         })
         .await
         .map_err(|_| invalid("无法生成代理，请检查 FFmpeg、原片和剩余磁盘空间"))?;
+        // Foreground readers can hold a lifecycle read lock while waiting for the
+        // encoder. Release CPU before joining the lifecycle queue again, so a queued
+        // writer cannot create a read-lock/encoder-permit cycle.
+        drop(permit);
+        let _lifecycle = MEDIA_LIFECYCLE.read().await;
         // The source may have changed or the project may have been deleted during encoding.
         let _sync = self.sync.lock().await;
-        if cancel.is_cancelled() {
+        if entry.cancel.is_cancelled() {
             return Err(invalid("代理已取消"));
         }
         self.validate(entry).await?;
@@ -562,4 +575,76 @@ fn needs_proxy(text: &str) -> bool {
             codec,
             "h264" | "hevc" | "mpeg2video" | "mpeg4" | "vp8" | "vp9" | "av1"
         ) && bitrate > 30_000)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn cache_encode_releases_lifecycle_and_cpu_before_publication() {
+        for relinked in [false, true] {
+            let (dir, pool, doc, path) = super::super::tests::fixture().await;
+            let saved = super::super::save(&pool, None, doc).await.unwrap();
+            let id = saved.document.project["media"][0]["id"].as_str().unwrap().to_owned();
+            let source = &saved.document.sources[&id];
+            let key = fingerprint(&path, source).await.unwrap();
+            let entry = Arc::new(Entry {
+                project: saved.summary.id,
+                id: id.clone(),
+                path,
+                key: key.clone(),
+                seconds: source.duration_ms().unwrap() as f64 / 1000.,
+                cancel: CancellationToken::new(),
+                state: Mutex::new(State {
+                    media_id: id,
+                    path: String::new(),
+                    phase: "queued",
+                    key,
+                    progress: 0.,
+                    waiting: None,
+                    error: None,
+                }),
+            });
+            let jobs = Arc::new(Jobs::new(pool, dir.path().join("renders")));
+            let lifecycle = MEDIA_LIFECYCLE.read().await;
+            let permit = transcode::acquire(&entry.cancel).await.unwrap();
+            let (acquired, writer_ready) = tokio::sync::oneshot::channel();
+            let (release, released) = tokio::sync::oneshot::channel();
+            let cleanup = tokio::spawn(async {
+                let _write = MEDIA_LIFECYCLE.write().await;
+                acquired.send(()).unwrap();
+                let _ = released.await;
+            });
+            tokio::task::yield_now().await;
+            let encode = tokio::spawn({
+                let jobs = jobs.clone();
+                let entry = entry.clone();
+                async move { jobs.encode(&entry, &entry.cancel, lifecycle, permit).await }
+            });
+            tokio::time::timeout(Duration::from_secs(15), writer_ready).await
+                .expect("cleanup must not wait for the whole cache encode").unwrap();
+            assert!(!encode.is_finished(), "publication must revalidate under a lifecycle lock");
+            let cpu = tokio::time::timeout(Duration::from_secs(15), transcode::acquire(&entry.cancel))
+                .await.expect("cache must release CPU before waiting for the publication lock").unwrap();
+            drop(cpu);
+            if relinked {
+                // Change the source while publication is blocked, without touching the
+                // file FFmpeg just encoded. That stale output must not become a cache.
+                sqlx::query("UPDATE segments SET path=?")
+                    .bind(dir.path().join("relinked.mp4").to_string_lossy().as_ref())
+                    .execute(&jobs.pool).await.unwrap();
+            }
+            release.send(()).unwrap();
+            cleanup.await.unwrap();
+            let result = encode.await.unwrap();
+            if relinked {
+                assert!(result.is_err());
+                assert!(!jobs.output(entry.project, &entry.key).exists());
+            } else {
+                assert!(result.unwrap());
+                assert!(jobs.output(entry.project, &entry.key).is_file());
+            }
+        }
+    }
 }
